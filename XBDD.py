@@ -181,24 +181,22 @@ def Ini_XBDD(var_order=[]):
     set_index_order(var_order)
     return get_const_dd()
 
-def Clear_TDD():
-    """To initialize the unique_table,computed_table and set up a global index order"""
-    global computed_table
-    global unique_table
-    global global_node_id
-    # global add_find_time,add_hit_time,cont_find_time,cont_hit_time
-    global_node_id=0
-    unique_table.clear()
-    computed_table.clear()
-    # add_find_time=0
-    # add_hit_time=0
-    # cont_find_time=0
-    # cont_hit_time=0
-
 def get_const_dd():
     node = Find_Or_Add_Unique_table(-1)
     dd = XBDD(node)
     return dd
+
+def create_var(level):
+    """Create the canonical XBDD edge representing ``x_level``."""
+    if isinstance(level, bool) or not isinstance(level, (int, np.integer)):
+        raise TypeError("level must be an integer")
+    if level < 0:
+        raise ValueError("level must be a non-negative integer")
+
+    low = get_const_dd()
+    low.neg = True
+    high = get_const_dd()
+    return normalize(int(level), [low, high])
 
 def get_unique_table():
     return unique_table
