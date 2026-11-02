@@ -261,7 +261,7 @@ def map_XOR(map1,map2):
     return map1 ^ map2
 
 def normalize(x,the_successors):
-    """The normalize and reduce procedure"""
+    """Normalize and reduce; terminal input edges must have empty maps."""
 
     if the_successors[0]==the_successors[1]:
         return the_successors[0]
@@ -269,9 +269,7 @@ def normalize(x,the_successors):
     neg = False
     if the_successors[0].node.id>the_successors[1].node.id:
         flip=1
-    elif the_successors[0].node.id==the_successors[1].node.id:
-        if tuple(sorted(the_successors[0].map))>tuple(sorted(the_successors[1].map)):
-            flip=1
+
     if flip:
         the_successors = [the_successors[1],the_successors[0]]
         
@@ -280,23 +278,24 @@ def normalize(x,the_successors):
         the_successors[0].neg = 1-the_successors[0].neg
         the_successors[1].neg = 1-the_successors[1].neg
 
-    the_map2 = the_successors[0].map^the_successors[1].map
+    if the_successors[0].node.key == -1 and the_successors[1].node.key != -1:
+        # Constant low-child lifting: the terminal branch
+        # is unaffected by moving the high-branch map to the incoming edge.
+        incoming_map = the_successors[1].map
+        the_map2 = set()
+    else:
+        incoming_map = the_successors[0].map
+        the_map2 = the_successors[0].map^the_successors[1].map
     
     succ_nodes=[succ.node for succ in the_successors]
     succ_negs = [succ.neg for succ in the_successors]
     node=Find_Or_Add_Unique_table(x,succ_nodes,the_map2,succ_negs)
     res=XBDD(node)
-    res.map = copy.copy(the_successors[0].map)
+    res.map = copy.copy(incoming_map)
     if flip:
         res.map.add(x)
     res.neg = neg
     return res
-
-def get_count():
-    global add_find_time,add_hit_time,cont_find_time,cont_hit_time,add_time,cont_time
-    print(add_time,cont_time)
-    print("add:",add_hit_time,'/',add_find_time,'/',add_hit_time/(add_find_time+1))
-    print("cont:",cont_hit_time,"/",cont_find_time,"/",cont_hit_time/(cont_find_time+1))
 
 def get_dd(U,var=[]):
     var_sort=sorted(var, key=lambda k: global_var_order[k])
@@ -341,7 +340,9 @@ def cofactor(dd,x,c):
     k=dd.node.key
     
     if k==-1:
-        return dd.self_copy()
+        res = dd.self_copy()
+        res.map.clear()
+        return res
     
     if k<x:
         res = dd.self_copy()
@@ -358,6 +359,10 @@ def cofactor(dd,x,c):
             res.neg = (dd.neg!=dd.node.out_negs[1-c])
             res.map = dd.map^dd.node.out_maps[1-c]
         res.map.discard(x)
+        # A nonterminal input may select a terminal child.
+        # Removing x alone leaves irrelevant flips on the constant edge.
+        if res.node.key == -1:
+            res.map.clear()
         return res
     else:
         print("Not supported yet!")
