@@ -266,17 +266,14 @@ def normalize(x,the_successors):
     if the_successors[0]==the_successors[1]:
         return the_successors[0]
     flip=0
-    neg = False
     if the_successors[0].node.id>the_successors[1].node.id:
         flip=1
 
     if flip:
         the_successors = [the_successors[1],the_successors[0]]
         
-    if the_successors[0].neg:
-        neg = True
-        the_successors[0].neg = 1-the_successors[0].neg
-        the_successors[1].neg = 1-the_successors[1].neg
+    # Lift the low complement without modifying the input edges.
+    neg = the_successors[0].neg
 
     if the_successors[0].node.key == -1 and the_successors[1].node.key != -1:
         # Constant low-child lifting: the terminal branch
@@ -288,7 +285,7 @@ def normalize(x,the_successors):
         the_map2 = the_successors[0].map^the_successors[1].map
     
     succ_nodes=[succ.node for succ in the_successors]
-    succ_negs = [succ.neg for succ in the_successors]
+    succ_negs = [False, the_successors[0].neg != the_successors[1].neg]
     node=Find_Or_Add_Unique_table(x,succ_nodes,the_map2,succ_negs)
     res=XBDD(node)
     res.map = copy.copy(incoming_map)
@@ -298,10 +295,12 @@ def normalize(x,the_successors):
     return res
 
 def get_dd(U,var=[]):
-    var_sort=sorted(var, key=lambda k: global_var_order[k])
-    var_sort.reverse()
-    key_2_var = {k:var_sort[k] for k in range(len(var_sort))}
-    var_2_key = {v: k for k, v in key_2_var.items()}
+    # Assign levels from the entire global order, including variables absent
+    # from this tensor. Higher-priority variables have larger XBDD levels.
+    var_sort = sorted((v for v in global_var_order if v != -1),
+                      key=lambda v: global_var_order[v], reverse=True)
+    var_2_key = {v: k for k, v in enumerate(var_sort)}
+    key_2_var = {k: v for k, v in enumerate(var_sort) if v in var}
     order=[]
     for v in var:
         order.append(var_2_key[v])
@@ -323,13 +322,16 @@ def np_2_dd(U,order=[]):
         return res
     if not order:
         order=list(range(U_dim))
+    else:
+        # The consumed-axis markers belong to this recursive call only.
+        order=list(order)
     x=max(order)
     split_pos=order.index(x)
     order[split_pos]=-1
     split_U=np.split(U,U_shape[split_pos],split_pos)
     the_successors=[]
     for k in range(U_shape[split_pos]):
-        res=np_2_dd(split_U[k],copy.copy(order))
+        res=np_2_dd(split_U[k],order)
         the_successors.append(res)
     tdd = normalize(x,the_successors)
     return tdd
@@ -462,13 +464,13 @@ def apply(F: 'XBDD', G: 'XBDD', op: str):
         
     elif op == 'NAND':
         # NAND(F, G) = ~ITE(F, G, 0)
-        res = if_then_else(F, G, dd0)
+        res = if_then_else(F, G, dd0).self_copy()
         res.neg = not res.neg
         return res
         
     elif op == 'NOR':
         # NOR(F, G) = ~ITE(F, 1, G)
-        res = if_then_else(F, dd1, G)
+        res = if_then_else(F, dd1, G).self_copy()
         res.neg = not res.neg
         return res
         
